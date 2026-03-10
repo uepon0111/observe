@@ -27,7 +27,7 @@ jobs:
           pip install requests
 
       - name: スクリプトの実行
-        run: python fetch_timeline.py
+        run: PYTHONUNBUFFERED=1 python fetch_timeline.py
 
       - name: 変更があった場合はコミットしてプッシュ
         run: |
