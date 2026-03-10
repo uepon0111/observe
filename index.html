@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>タイムライン</title>
+    <style>
+        /* 全体のスタイル */
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        /* 投稿カードのスタイル */
+        .post {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+            padding: 20px;
+            transition: transform 0.2s;
+        }
+        .post:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        /* 日付のスタイル */
+        .post-date {
+            font-size: 0.85em;
+            color: #65676b;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+        }
+        
+        /* 本文のスタイル */
+        .post-text {
+            font-size: 1rem;
+            line-height: 1.6;
+            white-space: pre-wrap; /* 改行をそのまま表示 */
+            word-wrap: break-word;
+            margin-bottom: 16px;
+        }
+        
+        /* 画像ギャラリーのスタイル */
+        .post-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 8px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .post-images img {
+            width: 100%;
+            height: 100%;
+            max-height: 300px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        /* 読み込み中の表示 */
+        .loading {
+            text-align: center;
+            color: #666;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>タイムライン</h1>
+    <div id="timeline" class="loading">データを読み込んでいます...</div>
+</div>
+
+<script>
+    async function loadTimeline() {
+        const timelineDiv = document.getElementById('timeline');
+        try {
+            // 自動生成されたJSONLファイルを読み込む
+            const response = await fetch('timeline_data.jsonl');
+            if (!response.ok) throw new Error('データが見つかりません');
+            
+            const text = await response.text();
+            
+            // 行ごとに分割してJSONオブジェクトに変換（空行は除外）
+            const lines = text.trim().split('\n');
+            const posts = lines.filter(line => line).map(line => JSON.parse(line));
+            
+            // 日付の新しい順（降順）に並び替え
+            posts.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+            
+            // 読み込み中テキストをクリア
+            timelineDiv.innerHTML = ''; 
+            
+            if (posts.length === 0) {
+                timelineDiv.innerHTML = '<p style="text-align:center;">投稿がありません。</p>';
+                return;
+            }
+
+            // 各投稿のHTMLを組み立てる
+            posts.forEach(post => {
+                const postElement = document.createElement('div');
+                postElement.className = 'post';
+                
+                // 日付を見やすくフォーマット
+                const date = new Date(post.publishedAt);
+                const dateString = date.toLocaleString('ja-JP', {
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit'
+                });
+                
+                // 本文（XSS対策としてタグをエスケープ処理）
+                const safeText = escapeHTML(post.text);
+                const textHtml = safeText ? `<div class="post-text">${safeText}</div>` : '';
+                
+                // 画像タグの生成（画像がある場合のみ）
+                let imagesHtml = '';
+                if (post.images && post.images.length > 0) {
+                    imagesHtml = '<div class="post-images">';
+                    post.images.forEach(imgUrl => {
+                        // loading="lazy" で画像の遅延読み込みを有効化（表示高速化）
+                        imagesHtml += `<img src="${imgUrl}" alt="投稿画像" loading="lazy">`;
+                    });
+                    imagesHtml += '</div>';
+                }
+                
+                // 要素を結合してDOMに追加
+                postElement.innerHTML = `
+                    <div class="post-date">${dateString}</div>
+                    ${textHtml}
+                    ${imagesHtml}
+                `;
+                
+                timelineDiv.appendChild(postElement);
+            });
+            
+        } catch (error) {
+            console.error(error);
+            timelineDiv.innerHTML = '<p style="text-align:center;">データの読み込みに失敗しました。</p>';
+        }
+    }
+
+    // セキュリティ対策（HTMLタグの無効化）
+    function escapeHTML(str) {
+        if (!str) return '';
+        return str.replace(/[&<>'"]/g, match => {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#39;',
+                '"': '&quot;'
+            }[match];
+        });
+    }
+
+    // スクリプトの実行
+    loadTimeline();
+</script>
+
+</body>
+</html>
