@@ -1,0 +1,38 @@
+name: Update Timeline
+
+on:
+  schedule:
+    # 毎日 UTC 0:00 (日本時間 9:00) に実行
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 手動実行も可能にするボタン
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # リポジトリに書き込む権限
+
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v4
+
+      - name: Pythonのセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: 必要なパッケージのインストール
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: スクリプトの実行
+        run: python fetch_timeline.py
+
+      - name: 変更があった場合はコミットしてプッシュ
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add timeline.json
+          # 変更がない場合はコミットせずに終了する
+          git diff --quiet && git diff --staged --quiet || (git commit -m "タイムラインを自動更新" && git push)
