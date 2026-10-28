@@ -1,0 +1,36 @@
+name: Update Timeline Data
+
+on:
+  schedule:
+    # 毎日 日本時間 12:00 (UTC 3:00) に自動実行
+    - cron: '0 3 * * *'
+  workflow_dispatch: # 手動でも実行できるようにする
+
+permissions:
+  contents: write
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run fetch script
+        run: python fetch_timeline.py
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add timeline_data.jsonl
+          # 差分がある場合のみコミットとプッシュを行う
+          git diff --staged --quiet || (git commit -m "Auto-update timeline data" && git push)
