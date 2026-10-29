@@ -27,10 +27,15 @@ jobs:
       - name: Run fetch script
         run: python fetch_timeline.py
 
+      - name: Record fetch time
+        # 取得に成功した時刻を記録（画面の「最終取得」表示用。新着投稿がない日も更新される）
+        run: |
+          date -u +'{"lastFetchedAt":"%Y-%m-%dT%H:%M:%SZ"}' > last_fetched.json
+
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add timeline_data.jsonl
+          git add timeline_data.jsonl last_fetched.json
           # 差分がある場合のみコミットとプッシュを行う
           git diff --staged --quiet || (git commit -m "Auto-update timeline data" && git push)
