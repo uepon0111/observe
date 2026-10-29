@@ -98,7 +98,7 @@ def main():
 
             # ファイルに追記保存
             with open(DATA_FILE, "a", encoding="utf-8") as f:
-                f.write(json.dumps(save_data, ensure_ascii=False) + "\\n")
+                f.write(json.dumps(save_data, ensure_ascii=False) + "\n")
 
             fetched_ids.add(post_id)
             time.sleep(1)  # APIサーバーに負荷をかけないよう1秒待機
