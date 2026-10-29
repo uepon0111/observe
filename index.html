@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>タイムライン</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN','Hiragino Sans',Meiryo,sans-serif;background:#f0f2f5;color:#1c1e21;margin:0}
+.wrap{max-width:640px;margin:0 auto;padding:0 20px}
+h1{text-align:center;color:#333;margin:0;padding:20px 0 6px}
+.fetched{margin:0;padding:0 0 12px;min-height:calc(1.4em + 12px);text-align:center;font-size:.8rem;line-height:1.4;color:#65676b}
+main.wrap{padding-top:16px;padding-bottom:40px}
+
+/* タブ（上部固定） */
+.tabs{position:sticky;top:0;z-index:10;background:#f0f2f5;box-shadow:0 1px 0 rgba(0,0,0,.1)}
+.tabs .wrap{display:flex}
+.tabs button{flex:1 1 auto;height:48px;padding:0 6px;border:0;border-bottom:3px solid transparent;background:none;font:inherit;font-size:.92rem;font-weight:700;color:#65676b;white-space:nowrap;cursor:pointer}
+.tabs button[aria-selected=true]{color:#1877f2;border-bottom-color:#1877f2}
+.tabs button:focus-visible{outline:2px solid #1877f2;outline-offset:-2px}
+#bmn{font-weight:400}
+
+/* 検索・期間・並び順 */
+.toolbar{background:#fff;border-radius:12px;box-shadow:0 2px 4px rgba(0,0,0,.1);padding:14px;margin:0 0 20px;display:grid;gap:10px}
+.toolbar input{width:100%;min-width:0;height:40px;border:1px solid #ccd0d5;border-radius:8px;padding:0 12px;font:inherit;font-size:16px;color:inherit;background:#fff;-webkit-appearance:none;appearance:none;text-align:left}
+.toolbar input:focus{outline:2px solid #1877f2;outline-offset:-1px}
+.range{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px;align-items:center;color:#65676b}
+.meta{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;font-size:.85em;color:#65676b}
+.acts{display:flex;align-items:center;gap:12px}
+.meta button{border:0;background:none;color:#1877f2;font:inherit;padding:4px 0;cursor:pointer}
+.meta #sort{border:1px solid #1877f2;border-radius:999px;padding:5px 14px;font-weight:600}
+
+/* 投稿カード */
+.post{background:#fff;border-radius:12px;box-shadow:0 2px 4px rgba(0,0,0,.1);margin-bottom:24px;padding:20px;transition:transform .2s,box-shadow .2s;scroll-margin-top:60px}
+.post:hover{transform:translateY(-2px);box-shadow:0 4px 8px rgba(0,0,0,.15)}
+.post.flash{animation:flash 2s}
+@keyframes flash{0%,70%{box-shadow:0 0 0 3px #1877f2}}
+.post-head{display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid #eee;padding-bottom:6px;margin-bottom:12px}
+.post-date{font-size:.85em;color:#65676b}
+.bm{flex:none;display:flex;align-items:center;justify-content:center;width:36px;height:36px;margin:-4px -6px -4px 0;padding:0;border:0;border-radius:50%;background:none;color:#8a8d91;cursor:pointer}
+.bm svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+.bm.on{color:#f5a300}
+.bm.on svg{fill:currentColor}
+.bm:focus-visible{outline:2px solid #1877f2}
+.post-text{font-size:1rem;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:16px}
+.post-text:last-child{margin-bottom:0}
+mark{background:#ffe58a;color:inherit;border-radius:2px}
+.loading{text-align:center;color:#666;font-weight:bold}
+.empty{text-align:center;color:#65676b;line-height:1.6}
+
+/* 投稿内の画像（全投稿で同じ比率。枚数に応じて分割） */
+.post-images{display:grid;gap:3px;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:#fff}
+.n2{grid-template-columns:1fr 1fr}
+.n3,.n4{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+.n3 .thumb:first-child{grid-row:span 2}
+.thumb{position:relative;display:block;width:100%;height:100%;min-width:0;min-height:0;margin:0;padding:0;border:0;overflow:hidden;background:#e4e6eb;cursor:zoom-in}
+.thumb:focus-visible{outline:3px solid #1877f2;outline-offset:-3px}
+.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.n1 .thumb img{object-fit:contain}
+.more{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);color:#fff;font-size:1.6rem;font-weight:bold}
+
+/* 画像タブ（同じ大きさの正方形。画面幅に関わらず3列固定。複数枚は1枚目のみ表示） */
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.cell{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#e4e6eb}
+.cell .thumb{position:absolute;inset:0}
+.badge{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);color:#fff;font-size:.75rem;font-weight:700;line-height:1;padding:4px 7px;border-radius:10px}
+
+/* 拡大表示 */
+#lb{position:fixed;inset:0;z-index:100;display:none;background:rgba(0,0,0,.94);touch-action:pan-x;overscroll-behavior:contain}
+#lb.open{display:block}
+#lb-track{display:flex;height:100%;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior:contain;touch-action:pan-x}
+#lb-track::-webkit-scrollbar{display:none}
+.slide{flex:0 0 100%;height:100%;display:flex;align-items:center;justify-content:center;padding:56px 8px 76px;scroll-snap-align:center;scroll-snap-stop:always}
+.slide img{max-width:100%;max-height:100%;object-fit:contain;user-select:none;-webkit-user-select:none}
+.lb-btn{position:absolute;z-index:2;width:44px;height:44px;border:0;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;font-size:26px;line-height:1;cursor:pointer}
+#lb-close{top:max(8px,env(safe-area-inset-top));right:8px}
+#lb-prev,#lb-next{top:50%;margin-top:-22px}
+#lb-prev{left:8px}
+#lb-next{right:8px}
+#lb-count{position:absolute;z-index:2;top:max(8px,env(safe-area-inset-top));left:0;right:0;text-align:center;color:#fff;line-height:44px;font-size:.95rem;pointer-events:none}
+#lb-jump{position:absolute;z-index:2;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);height:44px;padding:0 22px;border:0;border-radius:22px;background:#1877f2;color:#fff;font:inherit;font-size:.95rem;font-weight:700;white-space:nowrap;cursor:pointer}
+#lb.single #lb-prev,#lb.single #lb-next{display:none}
+@media (hover:none){#lb-prev,#lb-next{display:none}}
+@media (max-width:480px){.wrap{padding:0 12px}.post{padding:14px}.toolbar{padding:12px}}
+@media (prefers-reduced-motion:reduce){.post.flash{animation:none;box-shadow:0 0 0 3px #1877f2}}
+</style>
+</head>
+<body>
+
+<div class="wrap"><h1>タイムライン</h1><p id="fetched" class="fetched"></p></div>
+<nav class="tabs" role="tablist" aria-label="表示切り替え"><div class="wrap">
+    <button type="button" role="tab" data-t="tl" aria-selected="true">タイムライン</button>
+    <button type="button" role="tab" data-t="img" aria-selected="false">画像</button>
+    <button type="button" role="tab" data-t="bm" aria-selected="false">ブックマーク<span id="bmn"></span></button>
+</div></nav>
+
+<main class="wrap">
+    <form class="toolbar" role="search" onsubmit="return false">
+        <input id="q" type="search" placeholder="キーワード検索（スペースでAND）" aria-label="キーワード検索" autocomplete="off" enterkeyhint="search">
+        <div class="range">
+            <input id="from" type="date" aria-label="開始日">
+            <span>〜</span>
+            <input id="to" type="date" aria-label="終了日">
+        </div>
+        <div class="meta">
+            <span id="count"></span>
+            <span class="acts">
+                <button type="button" id="sort"></button>
+                <button type="button" id="reset">リセット</button>
+            </span>
+        </div>
+    </form>
+    <div id="timeline" class="loading">データを読み込んでいます...</div>
+</main>
+
+<div id="lb" role="dialog" aria-modal="true" aria-label="画像拡大表示">
+    <div id="lb-count"></div>
+    <button type="button" class="lb-btn" id="lb-close" aria-label="閉じる">×</button>
+    <button type="button" class="lb-btn" id="lb-prev" aria-label="前の画像">‹</button>
+    <button type="button" class="lb-btn" id="lb-next" aria-label="次の画像">›</button>
+    <div id="lb-track"></div>
+    <button type="button" id="lb-jump">この投稿へ移動</button>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>';
+let all = [], tab = 'tl', desc = true, bm = new Set();
+const pos = {}; // タブごとのスクロール位置
+try { bm = new Set(JSON.parse(localStorage.getItem('tl-bookmarks') || '[]')); } catch {}
+const saveBM = () => { try { localStorage.setItem('tl-bookmarks', JSON.stringify([...bm])); } catch {} };
+
+function escapeHTML(str) {
+    return String(str ?? '').replace(/[&<>'"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
+}
+const norm = s => String(s ?? '').normalize('NFKC').toLowerCase(); // 全角/半角・大小文字を無視
+const pad = n => String(n).padStart(2, '0');
+const fmt = d => d.toLocaleString('ja-JP', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+// 検索語をハイライト（本文はエスケープしてから出力）
+function highlight(text, words) {
+    if (!words.length) return escapeHTML(text);
+    const re = new RegExp('(' + words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')', 'gi');
+    return text.split(re).map((s, i) => i % 2 ? '<mark>' + escapeHTML(s) + '</mark>' : escapeHTML(s)).join('');
+}
+
+const cntBM = () => { const n = all.reduce((c, p) => c + bm.has(p._k), 0); $('bmn').textContent = n ? ' ' + n : ''; };
+
+function card(p, raw) {
+    const im = p._im, n = Math.min(im.length, 4), on = bm.has(p._k);
+    const images = n ? `<div class="post-images n${n}">` + im.slice(0, n).map((u, i) =>
+        `<button type="button" class="thumb" data-i="${i}" aria-label="画像${i + 1}を拡大">` +
+        `<img src="${escapeHTML(u)}" alt="投稿画像" loading="lazy">` +
+        (i === 3 && im.length > 4 ? `<span class="more">+${im.length - 4}</span>` : '') +
+        `</button>`).join('') + '</div>' : '';
+    const text = p.text ? `<div class="post-text">${highlight(p.text, raw)}</div>` : '';
+    return `<article class="post" id="p${p._n}" data-n="${p._n}"><div class="post-head"><span class="post-date">${p._l}</span>` +
+        `<button type="button" class="bm${on ? ' on' : ''}" aria-pressed="${on}" aria-label="ブックマーク">${ICON}</button></div>${text}${images}</article>`;
+}
+
+// 画像タブ：1投稿につき最初の1枚のみ表示（複数枚は枚数バッジ）
+const tile = p => `<div class="cell" data-n="${p._n}"><button type="button" class="thumb" aria-label="画像を拡大（${p._im.length}枚）">` +
+    `<img src="${escapeHTML(p._im[0])}" alt="" loading="lazy">` +
+    (p._im.length > 1 ? `<span class="badge">${p._im.length}枚</span>` : '') + `</button></div>`;
+
+function render() {
+    const raw = $('q').value.trim().split(/\s+/).filter(Boolean);
+    const words = raw.map(norm);
+    let f = $('from').value, t = $('to').value;
+    if (f && t && f > t) [f, t] = [t, f];
+
+    const pool = tab === 'img' ? all.filter(p => p._im.length) : tab === 'bm' ? all.filter(p => bm.has(p._k)) : all;
+    const list = pool.filter(p =>
+        (!f || (p._d && p._d >= f)) && (!t || (p._d && p._d <= t)) && words.every(w => p._s.includes(w))
+    ).sort((a, b) => (desc ? b._t - a._t : a._t - b._t) || a._n - b._n);
+
+    $('count').textContent = list.length + '件' + (list.length !== pool.length ? '（全' + pool.length + '件）' : '');
+    $('sort').textContent = desc ? '新しい順 ↓' : '古い順 ↑';
+    $('sort').setAttribute('aria-label', desc ? '新しい順で表示中。押すと古い順に切り替え' : '古い順で表示中。押すと新しい順に切り替え');
+    cntBM();
+
+    const tl = $('timeline');
+    if (!list.length) {
+        tl.innerHTML = '<p class="empty">' + (pool.length ? '条件に一致する投稿がありません。'
+            : tab === 'bm' ? 'ブックマークはまだありません。<br>投稿右上のしおりアイコンで追加できます。'
+            : tab === 'img' ? '画像のある投稿がありません。' : '投稿がありません。') + '</p>';
+        return;
+    }
+    tl.innerHTML = tab === 'img' ? '<div class="grid">' + list.map(tile).join('') + '</div>' : list.map(p => card(p, raw)).join('');
+}
+
+function setTab(t, keep) {
+    const same = t === tab;
+    if (!same) pos[tab] = scrollY;
+    tab = t;
+    document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.t === t));
+    render();
+    if (!keep) scrollTo(0, same ? 0 : pos[t] || 0);
+}
+
+// 最終取得日時：取得ジョブが記録する last_fetched.json を表示。未記録の間は最新投稿の日時で代用（誤解を避けラベルを分ける）
+async function showFetched() {
+    let t = 0, label = '最終取得';
+    try {
+        const r = await fetch('last_fetched.json', {cache: 'no-cache'});
+        if (r.ok) t = new Date((await r.json()).lastFetchedAt).getTime() || 0;
+    } catch {}
+    if (!t) { label = '最新の投稿'; t = all.reduce((m, p) => Math.max(m, p._t), 0); }
+    if (!t) return;
+    const d = new Date(t);
+    $('fetched').innerHTML = `${label} <time datetime="${d.toISOString()}">${fmt(d)}</time>`;
+}
+
+async function loadTimeline() {
+    const tl = $('timeline');
+    try {
+        const res = await fetch('timeline_data.jsonl');
+        if (!res.ok) throw new Error('データが見つかりません');
+        const text = await res.text(), seen = {};
+        all = text.split('\n').flatMap(l => { l = l.trim(); if (!l) return []; try { return [JSON.parse(l)]; } catch { return []; } })
+            .map((p, n) => {
+                const d = new Date(p.publishedAt), ok = !isNaN(d), k = String(p.id ?? p.publishedAt ?? ''), c = seen[k] = (seen[k] || 0) + 1;
+                return {...p, _n: n, _k: c > 1 ? k + '#' + c : k, // _n=読込順(DOM id用) _k=ブックマーク用キー
+                    _im: Array.isArray(p.images) ? p.images.filter(Boolean) : [],
+                    _t: ok ? d.getTime() : 0, _d: ok ? dayKey(d) : '', _s: norm(p.text),
+                    _l: ok ? fmt(d) : ''};
+            });
+        tl.className = ''; // 読み込み中スタイルを外す
+        const days = all.map(p => p._d).filter(Boolean).sort();
+        if (days.length) { $('from').min = $('to').min = days[0]; $('from').max = $('to').max = days[days.length - 1]; }
+        render();
+        showFetched();
+    } catch (e) {
+        console.error(e);
+        tl.className = '';
+        tl.innerHTML = '<p class="empty">データの読み込みに失敗しました。</p>';
+    }
+}
+
+/* タブ・検索・期間・並び順 */
+document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setTab(b.dataset.t); });
+let timer;
+$('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 150); });
+$('from').addEventListener('change', render);
+$('to').addEventListener('change', render);
+$('sort').addEventListener('click', () => { desc = !desc; render(); });
+$('reset').addEventListener('click', () => { $('q').value = $('from').value = $('to').value = ''; render(); });
+
+/* 画像の拡大表示（横スクロール＋スナップでスワイプ対応） */
+const lb = $('lb'), track = $('lb-track');
+let cur = 0, total = 0, cp = null, opener = null;
+
+function updateLB() {
+    if (!track.clientWidth) return;
+    cur = Math.round(track.scrollLeft / track.clientWidth);
+    $('lb-count').textContent = total > 1 ? `${cur + 1} / ${total}` : '';
+    $('lb-prev').style.visibility = cur > 0 ? '' : 'hidden';
+    $('lb-next').style.visibility = cur < total - 1 ? '' : 'hidden';
+}
+function openLB(p, i) {
+    cp = p; total = p._im.length; opener = document.activeElement;
+    track.innerHTML = p._im.map(u => `<div class="slide"><img src="${escapeHTML(u)}" alt="拡大画像" draggable="false"></div>`).join('');
+    lb.classList.toggle('single', total < 2);
+    lb.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    track.scrollLeft = i * track.clientWidth;
+    updateLB();
+    $('lb-close').focus();
+}
+function closeLB() {
+    lb.classList.remove('open');
+    document.body.style.overflow = '';
+    track.innerHTML = '';
+    if (opener && opener.isConnected) opener.focus({preventScroll: true});
+    opener = null;
+}
+function jump() { // 拡大中の投稿をタイムライン上で表示
+    const n = cp._n;
+    closeLB();
+    setTab('tl', true);
+    const el = $('p' + n);
+    if (!el) return;
+    el.scrollIntoView({block: 'start'});
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 2000);
+}
+function go(d) {
+    const n = Math.max(0, Math.min(total - 1, cur + d));
+    track.scrollTo({left: n * track.clientWidth, behavior: 'smooth'});
+}
+$('timeline').addEventListener('click', e => {
+    const el = e.target.closest('.bm, .thumb');
+    if (!el) return;
+    const p = all[+el.closest('[data-n]').dataset.n];
+    if (el.classList.contains('bm')) { // ブックマーク切替（ブックマークタブでは次回表示まで一覧に残る＝誤タップを戻せる）
+        const on = !bm.has(p._k);
+        on ? bm.add(p._k) : bm.delete(p._k);
+        el.classList.toggle('on', on);
+        el.setAttribute('aria-pressed', on);
+        saveBM(); cntBM();
+    } else openLB(p, +el.dataset.i || 0);
+});
+track.addEventListener('scroll', updateLB, {passive: true});
+track.addEventListener('click', e => { if (e.target.tagName !== 'IMG') closeLB(); }); // 余白タップで閉じる
+$('lb-close').addEventListener('click', closeLB);
+$('lb-jump').addEventListener('click', jump);
+$('lb-prev').addEventListener('click', () => go(-1));
+$('lb-next').addEventListener('click', () => go(1));
+document.addEventListener('keydown', e => {
+    if (!lb.classList.contains('open')) return;
+    if (e.key === 'Escape') closeLB();
+    if (e.key === 'ArrowLeft') go(-1);
+    if (e.key === 'ArrowRight') go(1);
+});
+
+loadTimeline();
+</script>
+
+</body>
+</html>
